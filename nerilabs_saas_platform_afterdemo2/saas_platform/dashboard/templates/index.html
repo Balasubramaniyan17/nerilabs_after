@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeriLabs — Autonomous Experimentation Platform (SaaS)</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .filter-pills { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .filter-pill { background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .filter-pill:hover, .filter-pill.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+        
+        .dim-summary-card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px 20px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .dim-summary-item strong { color: #f8fafc; font-size: 15px; }
+        .dim-summary-item small { color: #94a3b8; display: block; font-size: 11px; }
+
+        .comb-selector-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 16px 0; }
+        .comb-col { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; }
+        .comb-col h5 { color: #38bdf8; font-size: 13px; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 6px; }
+        .comb-checkbox-list { display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; }
+        .comb-checkbox-item { font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #cbd5e1; }
+    </style>
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
+            document.querySelectorAll(".tab-panel").forEach(el => el.classList.remove("active"));
+            const targetNav = document.querySelector(`[data-tab="${tabId}"]`);
+            if (targetNav) targetNav.classList.add("active");
+            const targetPanel = document.getElementById(`tab-${tabId}`);
+            if (targetPanel) targetPanel.classList.add("active");
+            if (window.onTabSwitched) window.onTabSwitched(tabId);
+        }
+        function openOnboardingModal() {
+            const overlay = document.getElementById("onboarding-modal-overlay");
+            if (overlay) overlay.style.display = "flex";
+            const stepForm = document.getElementById("ob-step-form");
+            if (stepForm) stepForm.style.display = "block";
+            const stepResult = document.getElementById("ob-step-result");
+            if (stepResult) stepResult.style.display = "none";
+        }
+        function closeOnboardingModal() {
+            const overlay = document.getElementById("onboarding-modal-overlay");
+            if (overlay) overlay.style.display = "none";
+        }
+    </script>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">நெ</div>
+                <div class="brand-info">
+                    <h2>NeriLabs</h2>
+                    <span class="badge">SaaS Founder Suite</span>
+                </div>
+            </div>
+            <nav class="nav-menu">
+                <a href="#overview" class="nav-item active" data-tab="overview" onclick="switchTab('overview')">📊 Experiments & MAB</a>
+                <a href="#combinations" class="nav-item" data-tab="combinations" onclick="switchTab('combinations')">🔀 Factorial Combinations</a>
+                <a href="#create" class="nav-item" data-tab="create" onclick="switchTab('create')">⚡ Create Macro Test</a>
+                <a href="#stripe" class="nav-item" data-tab="stripe" onclick="switchTab('stripe')">💳 Stripe Dynamic Pricing</a>
+                <a href="#guardrails" class="nav-item" data-tab="guardrails" onclick="switchTab('guardrails')">🛡️ Guardrail Audit Logs</a>
+                <a href="#anomalies" class="nav-item" data-tab="anomalies" onclick="switchTab('anomalies')">
+                    🤖 Anomaly Inbox <span class="badge-pill" id="anomaly-count-badge">0</span>
+                </a>
+                <a href="#sdk" class="nav-item" data-tab="sdk" onclick="switchTab('sdk')">🔌 Client SDK & Integration</a>
+                <a href="#account" class="nav-item" data-tab="account" onclick="switchTab('account')">⚙️ Plan & Account</a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="tenant-tag">
+                    <small>Logged in Organization</small>
+                    <strong id="tenant-name">NeriLabs SaaS</strong>
+                </div>
+                <div class="api-key-chip" title="Click to copy API Key" onclick="copyApiKey()">
+                    <code id="sidebar-api-key-display">nerilabs_sk_live_9a8b7c6d5e4f3a2b1c</code>
+                </div>
+                <small style="display:block; margin-top:4px; font-size:10px;"><a href="#" onclick="localStorage.clear(); location.reload();" style="color: #64748b; text-decoration: underline;">Reset Stored Key</a></small>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="top-header">
+                <div>
+                    <h1 id="page-title">Live Experiments & Traffic Allocation</h1>
+                    <p class="subtitle">Autonomous multi-armed bandit routing, dimension filtering, and factorial interaction testing.</p>
+                </div>
+                <div class="header-actions" style="display: flex; align-items: center; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px; background: #0f172a; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155;">
+                        <span style="font-size: 11px; color: #10b981; font-weight: 700; display: flex; align-items: center; gap: 4px;">● LIVE</span>
+                        <select id="header-experiment-select" onchange="changeActiveExperiment(this.value)" style="background: transparent; color: #38bdf8; border: none; font-size: 13px; font-weight: 700; cursor: pointer; outline: none; max-width: 280px;">
+                            <option value="">Connecting to your experiment...</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary" onclick="openOnboardingModal()">🚀 Quick Setup Wizard</button>
+                    <div style="display: flex; align-items: center; gap: 8px; background: #0b1120; border: 1px solid #10b981; padding: 6px 14px; border-radius: 8px;"><div style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></div><span style="font-size: 12px; font-weight: 700; color: #10b981;">Live Monitoring</span></div>
+                    <button class="btn btn-primary" onclick="switchTab('create')">+ New Experiment</button>
+                </div>
+            </header>
+
+            <!-- ONBOARDING WIZARD MODAL -->
+            <div id="onboarding-modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; padding: 20px;">
+                <div class="card" style="max-width: 680px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative;">
+                    <button onclick="closeOnboardingModal()" style="position: absolute; top: 16px; right: 16px; background: transparent; border: none; color: #94a3b8; font-size: 20px; cursor: pointer;">✕</button>
+                    
+                    <div id="ob-step-form">
+                        <div class="badge" style="margin-bottom: 8px;">3-Minute Instant Setup</div>
+                        <h2>🚀 Deploy Autonomous CRO on Your Website</h2>
+                        <p class="subtitle" style="margin-bottom: 20px;">Enter your website details. Our agents will autonomously synthesize variants, validate them against safety guardrails, and generate your 1-line installation snippet.</p>
+
+                        <form id="onboarding-wizard-form" onsubmit="handleOnboardingSubmit(event)">
+                            <div class="form-group">
+                                <label>1. Your Target Website URL</label>
+                                <input type="url" id="ob-url" value="https://startup.io" placeholder="https://yourstartup.com" required>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>2. Button / Headline CSS Selector</label>
+                                    <input type="text" id="ob-selector" value="#primary-cta" placeholder="#hero-cta, .signup-btn" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Current Element Text</label>
+                                    <input type="text" id="ob-text" value="Get Started Free" placeholder="e.g. Get Started Free">
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Brand Primary Color</label>
+                                    <input type="text" id="ob-color-primary" value="#2563eb">
+                                </div>
+                                <div class="form-group">
+                                    <label>Brand Accent Color</label>
+                                    <input type="text" id="ob-color-accent" value="#f59e0b">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Stripe Restricted Key (Optional — for pricing tests)</label>
+                                <input type="password" id="ob-stripe-key" placeholder="rk_live_...">
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-lg" id="btn-ob-submit" style="width: 100%; margin-top: 12px;">
+                                ✨ Generate AI Variants & Get Script Tag
+                            </button>
+                        </form>
+                    </div>
+
+                    <div id="ob-step-result" style="display: none;">
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <div style="font-size: 40px; margin-bottom: 8px;">🎉</div>
+                            <h2>Variants Pre-Computed & Guardrailed!</h2>
+                            <p class="subtitle" id="ob-summary-text">Generated and approved multi-modal variations.</p>
+                        </div>
+
+                        <h3>Paste this 1 line of code inside your <code>&lt;head&gt;</code>:</h3>
+                        <pre class="code-block" style="margin: 16px 0;"><code id="ob-code-snippet"></code></pre>
+
+                        <div style="display: flex; gap: 12px; margin-top: 20px;">
+                            <button class="btn btn-primary" onclick="copySnippetCode()">📋 Copy Script Tag</button>
+                            <button class="btn btn-secondary" onclick="closeOnboardingModal(); switchTab('overview');">Go to Live Dashboard →</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 1: Overview & Bandit Analytics (With Category Dimension Filtering) -->
+            <section id="tab-overview" class="tab-panel active">
+                                <!-- Active Live Experiment Context Bar -->
+                <div id="active-exp-bar" style="background: #1e293b; border: 1px solid #3b82f6; border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <span style="font-size: 11px; color: #38bdf8; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Active Experiment Target</span>
+                        <h3 id="active-exp-title" style="margin: 2px 0 4px; font-size: 16px; color: #f8fafc;">Live Website CTA Optimization</h3>
+                        <div style="font-size: 12px; color: #94a3b8;">
+                            Target Selector: <code id="active-exp-target" style="color: #f59e0b; background: #0f172a; padding: 2px 6px; border-radius: 4px;">#hero-cta</code>
+                            &nbsp;•&nbsp; Page URL: <a id="active-exp-url-link" href="#" target="_blank" style="color: #38bdf8; text-decoration: underline;"><span id="active-exp-url">Your Website</span> ↗</a>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" style="padding: 7px 14px; font-size: 12px;" onclick="switchTab('sdk')">📋 View Script Tag</button>
+                        <button class="btn btn-primary" style="padding: 7px 14px; font-size: 12px;" onclick="openOnboardingModal()">🚀 Setup New Site</button>
+                    </div>
+                </div>
+
+                <div id="mab-trust-banner" class="alert-box alert-warning">
+                    <div class="alert-icon">⚠️</div>
+                    <div>
+                        <strong id="mab-status-title">Active Traffic Allocation</strong>
+                        <p id="mab-status-desc">Thompson Sampling is actively balancing exploration and conversion exploitation.</p>
+                    </div>
+                </div>
+
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-label">Total Impressions</span>
+                        <h3 id="stat-total-impressions">0</h3>
+                        <small class="trend positive">Live Web Traffic</small>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Total Conversions</span>
+                        <h3 id="stat-total-conversions">0</h3>
+                        <small class="trend positive">Verified Events</small>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Blended Conversion Rate</span>
+                        <h3 id="stat-overall-cvr">0.00%</h3>
+                        <small class="trend neutral">Real-time Average</small>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Leading Variant Win Probability</span>
+                        <h3 id="stat-leading-confidence">0.0%</h3>
+                        <small class="trend positive" id="stat-leading-name">None</small>
+                    </div>
+                </div>
+
+                <!-- Dimension Filter Tabs -->
+                <div class="filter-pills">
+                    <button class="filter-pill active" onclick="setDimensionFilter('ALL')">All Arms (<span id="count-all">0</span>)</button>
+                    <button class="filter-pill" onclick="setDimensionFilter('COPY')">✍️ Copy Only (<span id="count-copy">0</span>)</button>
+                    <button class="filter-pill" onclick="setDimensionFilter('STYLE')">🎨 Style/UI Only (<span id="count-style">0</span>)</button>
+                    <button class="filter-pill" onclick="setDimensionFilter('COMPONENT')">🧩 Component Only (<span id="count-component">0</span>)</button>
+                    <button class="filter-pill" onclick="setDimensionFilter('PRICING')">💳 Pricing Only (<span id="count-pricing">0</span>)</button>
+                    <button class="filter-pill" onclick="setDimensionFilter('COMPOSITE')">🔀 Combinations (<span id="count-composite">0</span>)</button>
+                </div>
+
+                <!-- Dimension Performance Summary Card -->
+                <div id="dimension-summary-box" class="dim-summary-card" style="display: none;">
+                    <div class="dim-summary-item">
+                        <small>Active Category Filter</small>
+                        <strong id="dim-summary-title">Copy Variations</strong>
+                    </div>
+                    <div class="dim-summary-item">
+                        <small>Category Blended CVR</small>
+                        <strong id="dim-summary-cvr">0.00%</strong>
+                    </div>
+                    <div class="dim-summary-item">
+                        <small>Top Winner in Category</small>
+                        <strong id="dim-summary-winner">None</strong>
+                    </div>
+                    <div class="dim-summary-item">
+                        <small>Lift vs Control Baseline</small>
+                        <strong id="dim-summary-lift" style="color: #10b981;">+0.0%</strong>
+                    </div>
+                </div>
+
+                <div class="card table-card">
+                    <div class="card-header">
+                        <h3>Multi-Armed Bandit Traffic Allocation & Arm Statistics</h3>
+                        <span class="badge">10% Exploration Floor Enforced</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Variant Name</th>
+                                    <th>Type</th>
+                                    <th>Impressions</th>
+                                    <th>Conversions</th>
+                                    <th>Observed CVR</th>
+                                    <th>Posterior Alpha / Beta</th>
+                                    <th>Win Probability</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mab-arms-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: Factorial Combinations & Multivariate Matrix Studio -->
+            <section id="tab-combinations" class="tab-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>🔀 Factorial Combinations & Multivariate Matrix</h2>
+                            <p class="subtitle">Combine top-performing copy, styles, components, and pricing tiers to test interaction effects and discover winning hybrids.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="autoSynthesizeTopPerformers()">⚡ Auto-Synthesize Top-Performers Hybrid</button>
+                    </div>
+
+                    <!-- Interactive Combinatorial Matrix Picker -->
+                    <div class="comb-selector-grid">
+                        <!-- Column 1: Copy -->
+                        <div class="comb-col">
+                            <h5>1. Select Copy Variations</h5>
+                            <div id="comb-copy-list" class="comb-checkbox-list"></div>
+                        </div>
+
+                        <!-- Column 2: Style/UI -->
+                        <div class="comb-col">
+                            <h5>2. Select Style Variations</h5>
+                            <div id="comb-style-list" class="comb-checkbox-list"></div>
+                        </div>
+
+                        <!-- Column 3: Component -->
+                        <div class="comb-col">
+                            <h5>3. Select Components</h5>
+                            <div id="comb-component-list" class="comb-checkbox-list"></div>
+                        </div>
+
+                        <!-- Column 4: Pricing -->
+                        <div class="comb-col">
+                            <h5>4. Select Pricing Points</h5>
+                            <div id="comb-pricing-list" class="comb-checkbox-list"></div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-lg" style="width: 100%; margin-top: 12px;" onclick="synthesizeSelectedCombinations()">
+                        ⚡ Synthesize Selected Combinations & Run Guardrails
+                    </button>
+                </div>
+            </section>
+
+            <!-- TAB 3: Create Macro Experiment -->
+            <section id="tab-create" class="tab-panel">
+                <div class="card form-card">
+                    <h2>Launch an Agentic Macro Test</h2>
+                    <p class="form-desc">Select the type of experiment you want to run. Our agents will autonomously synthesize variants and validate them against guardrails.</p>
+                    
+                    <form id="create-experiment-form" onsubmit="handleCreateExperiment(event)">
+                        <div class="form-group">
+                            <label>Experiment Type</label>
+                            <select id="inp-exp-type" onchange="toggleExperimentTypeFields()">
+                                <option value="COPY_UI">🎨 Copy & Visual UI / Layout Test</option>
+                                <option value="PRICING_TEST">💳 Stripe Pricing Elasticity Test ($49 vs $79 vs $99)</option>
+                                <option value="ONBOARDING_FUNNEL">📝 Onboarding Funnel & Schema Relaxation</option>
+                            </select>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Experiment ID</label>
+                                <input type="text" id="inp-exp-id" value="exp_saas_hero_conversion" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Experiment Title</label>
+                                <input type="text" id="inp-exp-title" value="Homepage Hero Optimization" required>
+                            </div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Target Page URL</label>
+                                <input type="url" id="inp-exp-url" value="https://startup.io" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Target DOM Selector</label>
+                                <input type="text" id="inp-exp-selector" value="#hero-cta" required>
+                            </div>
+                        </div>
+
+                        <div id="fields-copy-ui">
+                            <div class="form-group">
+                                <label>Hypothesis or Optimization Goal</label>
+                                <textarea id="inp-exp-hypothesis" rows="2">Increase hero CTA trial conversions by testing behavioral psychological copy triggers and modern high-contrast styling.</textarea>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Brand Primary Color</label>
+                                    <input type="text" id="inp-brand-primary" value="#2563eb">
+                                </div>
+                                <div class="form-group">
+                                    <label>Brand Accent Color</label>
+                                    <input type="text" id="inp-brand-accent" value="#f59e0b">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="fields-pricing" style="display: none; background: #0f172a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
+                            <h4 style="margin-bottom: 12px;">Stripe Price Points to Test (USD / Monthly)</h4>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Price Tier A (Control Baseline)</label>
+                                    <input type="number" id="inp-price-a" value="49" min="1" step="1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Price Tier B (Test Variant)</label>
+                                    <input type="number" id="inp-price-b" value="79" min="1" step="1">
+                                </div>
+                            </div>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Price Tier C (Optional High Tier)</label>
+                                    <input type="number" id="inp-price-c" value="99" min="1" step="1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Billing Interval</label>
+                                    <select id="inp-price-interval">
+                                        <option value="month">Monthly ($/mo)</option>
+                                        <option value="year">Annual ($/yr)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg" id="btn-submit-exp">
+                            ✨ Launch Experiment Suite
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- TAB 4: Stripe Dynamic Pricing -->
+            <section id="tab-stripe" class="tab-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Stripe Price Elasticity Testing & Server-Side Token Resolution</h3>
+                        <span class="badge">Section 3.8 Architecture</span>
+                    </div>
+
+                    <div class="stripe-grid">
+                        <div class="stripe-box">
+                            <h4>⚡ Quick Launch a Price Test</h4>
+                            <form onsubmit="handleQuickPricingTest(event)" style="margin-top: 12px;">
+                                <div class="form-group">
+                                    <label>Experiment ID</label>
+                                    <input type="text" id="quick-price-exp-id" value="exp_saas_pricing_tier" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Target Price Display Selector</label>
+                                    <input type="text" id="quick-price-selector" value="#pro-price-amount" required>
+                                </div>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Tier A ($/mo)</label>
+                                        <input type="number" id="quick-price-a" value="49">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Tier B ($/mo)</label>
+                                        <input type="number" id="quick-price-b" value="79">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary" style="width: 100%;">Create Stripe Pricing Arms</button>
+                            </form>
+                        </div>
+
+                        <div class="stripe-box">
+                            <h4>🔒 Server-Side Price Resolution Simulator</h4>
+                            <p style="font-size: 13px; color: #94a3b8; margin: 8px 0;">Simulate a visitor clicking "Subscribe" to verify that the server securely resolves the Price ID from the signed token and locks the commit boundary.</p>
+                            <button class="btn btn-secondary" onclick="simulateServerSidePriceResolution()" style="margin-top: 8px; width: 100%;">
+                                Test Server-Side Token Checkout →
+                            </button>
+                            <div id="checkout-resolution-result" style="display: none; margin-top: 12px; background: #1e293b; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Behavioral Rescue Panel -->
+                    <div class="card" style="margin-top: 24px; background: #0f172a; border-left: 4px solid var(--accent);">
+                        <div class="card-header">
+                            <div>
+                                <h4>🎁 Behavioral Rescue Offer & Pricing Compliance (Section 3.11 & 6.2)</h4>
+                                <p class="subtitle">Detect visitor hesitation and deploy an explicit, legally compliant promotional discount code.</p>
+                            </div>
+                            <span class="badge" style="background: #10b981; color: #fff;">FTC & EU OMNIBUS COMPLIANT</span>
+                        </div>
+
+                        <div class="stripe-grid">
+                            <div class="stripe-box" style="background: #1e293b;">
+                                <h5>⚙️ Configure Rescue Trigger & Promo</h5>
+                                <div class="form-grid" style="margin-top: 12px;">
+                                    <div class="form-group">
+                                        <label>Dwell Hesitation Trigger (seconds)</label>
+                                        <input type="number" id="cfg-dwell-sec" value="8" min="2" max="60">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Promotional Code</label>
+                                        <input type="text" id="cfg-promo-code" value="FOUNDER20">
+                                    </div>
+                                </div>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Discount Amount (%)</label>
+                                        <input type="number" id="cfg-discount-pct" value="20" min="5" max="80">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Rescue Price ($/mo)</label>
+                                        <input type="number" id="cfg-rescue-price" value="49" min="1">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Transparent Disclosure Statement</label>
+                                    <input type="text" id="cfg-disclosure-text" value="Promotional offer unlocked for first-time visitors during this session.">
+                                </div>
+                                <button class="btn btn-primary" style="width: 100%; margin-top: 8px;" onclick="saveRescueConfig()">Save Behavioral Rescue Policy</button>
+                                <button class="btn btn-secondary" style="width: 100%; margin-top: 8px; background:#0f172a;" onclick="previewAICreativeOffers()">✨ Ask AI Agent to Synthesize 3 Creative Angles</button>
+                                <div id="ai-angles-preview-container" style="display: none; margin-top: 12px;"></div>
+                            </div>
+
+                            <div class="stripe-box" style="background: #1e293b;">
+                                <h5>🧪 Test Live Behavioral Hesitation</h5>
+                                <p style="font-size: 13px; color: #94a3b8; margin: 8px 0;">Simulate a visitor hesitating on the pricing table for 10 seconds.</p>
+                                <button class="btn btn-secondary" style="width: 100%; margin-top: 8px;" onclick="testBehavioralRescueSimulation()">⚡ Simulate Hesitation & Trigger Rescue Modal</button>
+                                <div id="rescue-simulation-result" style="display: none; margin-top: 12px; background: #0f172a; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; border: 1px solid #334155;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: Guardrail Audit Logs -->
+            <section id="tab-guardrails" class="tab-panel">
+                <div class="card table-card">
+                    <div class="card-header">
+                        <h3>Runtime Interdiction & Guardrail Audit Trail</h3>
+                        <p class="subtitle">Complete safety history of every accept/reject decision with rule triggers (Section 3.5 & 6.1).</p>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Check Name</th>
+                                    <th>Verdict</th>
+                                    <th>Rule ID Fired</th>
+                                    <th>Audit Message</th>
+                                    <th>Founder Override</th>
+                                </tr>
+                            </thead>
+                            <tbody id="guardrail-audit-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 6: Anomaly Proposal Inbox -->
+            <section id="tab-anomalies" class="tab-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Autonomous Anomaly Proposals (Human-in-the-Loop)</h3>
+                        <p class="subtitle">AI-detected conversion deviations adjusted for day-of-week seasonality and traffic mix (Section 3.10 & 6.4).</p>
+                    </div>
+                    <div id="anomaly-proposals-container"></div>
+                </div>
+            </section>
+
+            <!-- TAB 7: Client SDK Integration -->
+            <section id="tab-sdk" class="tab-panel">
+                <div class="card">
+                    <h2>Integrate Client SDK in 1 Line of Code</h2>
+                    <p class="subtitle">Include this script tag inside the <code>&lt;head&gt;</code> of your website. Anti-flicker protection, dynamic pricing, and telemetry beacons are automatically enabled.</p>
+                    
+                    <pre class="code-block"><code id="main-script-tag-code">&lt;!-- NeriLabs Autonomous Experimentation SDK (Public Safe) --&gt;
+&lt;script&gt;
+  window.AI_EXPERIMENT_API_BASE = "http://localhost:8000";
+  window.AI_EXPERIMENT_PUBLISHABLE_KEY = "nerilabs_pk_live_9a8b7c6d5e4f3a2b1c";
+  window.AI_EXPERIMENT_ID = "exp_saas_hero_conversion";
+&lt;/script&gt;
+&lt;script src="http://localhost:8000/static/experiment_sdk.js" async&gt;&lt;/script&gt;</code></pre>
+                </div>
+            </section>
+
+            <!-- TAB 8: Account & Plan Settings -->
+            <section id="tab-account" class="tab-panel">
+                <div class="card">
+                    <h2>Subscription & Account Settings</h2>
+                    <div class="stripe-grid" style="margin-top: 20px;">
+                        <div class="stripe-box">
+                            <span class="badge" style="background: #10b981; color: #fff;">ACTIVE SUBSCRIPTION</span>
+                            <h3 style="margin: 12px 0 6px;">Growth Plan ($99/mo)</h3>
+                            <p style="color: #94a3b8; font-size: 13px;">Includes 250k visitors/mo, Factorial Combinations, Stripe Price Tests, and Autonomous Anomaly Scanner.</p>
+                            <button class="btn btn-secondary" style="margin-top: 16px;" onclick="window.location.href='/landing#pricing'">Change Plan / Manage in Stripe →</button>
+                        </div>
+                        <div class="stripe-box">
+                            <h4>API Credentials & Security Keys</h4>
+                            <p style="font-size: 13px; margin: 6px 0;">Public Key (Client SDK): <code id="account-pk-key" style="color: #10b981;">nerilabs_pk_live_9a8b7c6d5e4f3a2b1c</code></p>
+                            <p style="font-size: 13px; margin: 6px 0;">Secret Key (Backend Admin): <code id="account-sk-key" style="color: #ef4444;">nerilabs_sk_live_9a8b7c6d5e4f3a2b1c</code></p>
+                            <p style="font-size: 13px; margin: 6px 0;">JWT Signing Secret: <code id="account-jwt-secret" style="color: #a855f7;">jwt_sec_...</code></p>
+                            <p style="font-size: 13px; margin-top: 8px;">Stripe Webhook URL: <code style="color: #38bdf8;">https://app.yourdomain.com/api/v1/billing/stripe/webhook</code></p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js?v=2.3.0"></script>
+</body>
+</html>
